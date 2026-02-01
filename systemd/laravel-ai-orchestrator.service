@@ -1,0 +1,16 @@
+[Unit]
+Description=Laravel AI Orchestrator Queue Worker
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/mnt/linux-data/www/mira-park-manager
+ExecStart=/usr/bin/php /mnt/linux-data/www/mira-park-manager/artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=120
+Restart=always
+RestartSec=5
+StandardOutput=append:/mnt/linux-data/www/mira-park-manager/storage/logs/queue-worker.log
+StandardError=append:/mnt/linux-data/www/mira-park-manager/storage/logs/queue-worker.log
+
+[Install]
+WantedBy=multi-user.target
