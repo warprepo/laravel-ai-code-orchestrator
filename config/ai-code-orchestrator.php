@@ -46,7 +46,7 @@ return [
             'base_url' => env('OPENAI_BASE_URL', 'https://api.openai.com/v1'),
             'model' => env('OPENAI_MODEL', 'gpt-4o-mini'),
             'temperature' => env('OPENAI_TEMPERATURE', 0.2),
-            'max_tokens' => env('OPENAI_MAX_TOKENS', 400),
+            'max_tokens' => env('OPENAI_MAX_TOKENS', 2000),
         ],
 
         'groq' => [
@@ -54,7 +54,7 @@ return [
             'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1'),
             'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
             'temperature' => env('GROQ_TEMPERATURE', 0.2),
-            'max_tokens' => env('GROQ_MAX_TOKENS', 400),
+            'max_tokens' => env('GROQ_MAX_TOKENS', 2000),
         ],
 
         'gemini' => [
@@ -62,7 +62,7 @@ return [
             'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
             'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
             'temperature' => env('GEMINI_TEMPERATURE', 0.2),
-            'max_output_tokens' => env('GEMINI_MAX_OUTPUT_TOKENS', 400),
+            'max_output_tokens' => env('GEMINI_MAX_OUTPUT_TOKENS', 2000),
         ],
     ],
 ];

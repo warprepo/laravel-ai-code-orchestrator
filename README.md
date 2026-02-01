@@ -33,6 +33,14 @@ GEMINI_MODEL=gemini-flash-lite-latest
 
 Use the included artisan command:
 
+Before testing locally, start a queue worker in another terminal:
+
+```bash
+php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=120
+```
+
+Then run:
+
 ```bash
 php artisan ai-orchestrator:report "Test AI" --provider=gemini --language=en
 ```

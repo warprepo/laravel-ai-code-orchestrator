@@ -76,8 +76,8 @@ class OpenAiClient implements AiClientInterface
         $laravelVersion = $this->getLaravelVersion();
 
         return $language === 'en'
-            ? "You are a technical assistant. Analyze Laravel/PHP errors and propose a short, practical fix. Project: Laravel {$laravelVersion}."
-            : "Sei un assistente tecnico. Analizza errori Laravel/PHP e proponi una soluzione breve e pratica. Progetto: Laravel {$laravelVersion}.";
+            ? "You are a technical assistant. Be concise. Do not repeat the error or stack trace. Provide only root cause and a practical fix (bullets). Project: Laravel {$laravelVersion}."
+            : "Sei un assistente tecnico. Sii conciso. Non ripetere errore o stack trace. Fornisci solo causa e soluzione pratica (punti elenco). Progetto: Laravel {$laravelVersion}.";
     }
 
     private function getLaravelVersion(): string
