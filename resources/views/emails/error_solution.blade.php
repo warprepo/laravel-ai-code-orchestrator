@@ -37,6 +37,23 @@
                                 <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'File' : 'File' }}</td>
                                 <td style="padding:6px 0;">{{ $report->file }}:{{ $report->line }}</td>
                             </tr>
+                            @php
+                                $offendingLine = null;
+                                $context = is_array($report->context ?? null) ? $report->context : [];
+                                $codeContext = $context['code_context'] ?? '';
+                                if (is_string($codeContext) && $codeContext !== '' && $report->line) {
+                                    $pattern = '/^\\s*'.preg_quote((string) $report->line, '/').'\\s*\\|\\s*(.+)$/m';
+                                    if (preg_match($pattern, $codeContext, $matches)) {
+                                        $offendingLine = $matches[1] ?? null;
+                                    }
+                                }
+                            @endphp
+                            @if($offendingLine)
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Offending line' : 'Riga incriminata' }}</td>
+                                    <td style="padding:6px 0;">{{ $offendingLine }}</td>
+                                </tr>
+                            @endif
                             <tr>
                                 <td style="padding:6px 0;color:#6b7280;">URL</td>
                                 <td style="padding:6px 0;">{{ $report->url }}</td>
