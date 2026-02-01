@@ -1,6 +1,6 @@
 # Laravel AI Code Orchestrator
 
-This package intercepts Laravel 11 errors, collects code context, sends the error to an AI provider (OpenAI/Groq/Gemini), and emails the administrator with the suggested fix. Errors are also stored in the database.
+This package intercepts Laravel 11 (or higher) errors, collects code context, sends the error to an AI provider (OpenAI/Groq/Gemini), and emails the administrator with the suggested fix. Errors are also stored in the database.
 
 ## What it is for
 

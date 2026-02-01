@@ -15,9 +15,7 @@ class GeminiClient implements AiClientInterface
         $apiKey = $config['api_key'] ?? '';
 
         $language = config('ai-code-orchestrator.ai.language', 'it');
-        $systemPrompt = $language === 'en'
-            ? 'You are a technical assistant. Analyze Laravel/PHP errors and propose a short, practical fix.'
-            : 'Sei un assistente tecnico. Analizza errori Laravel/PHP e proponi una soluzione breve e pratica.';
+        $systemPrompt = $this->resolveSystemPrompt($language);
 
         $payload = [
             'contents' => [
@@ -66,5 +64,29 @@ class GeminiClient implements AiClientInterface
             "Utente ID: ".($context['user_id'] ?? 'n/a')."\n".
             "Trace:\n{$trace}\n".
             ($codeContext ? "\nContesto codice:\n{$codeContext}\n" : '');
+    }
+
+    private function resolveSystemPrompt(string $language): string
+    {
+        $custom = config('ai-code-orchestrator.ai.system_prompt');
+        if (is_string($custom) && $custom !== '') {
+            return $custom;
+        }
+
+        $laravelVersion = $this->getLaravelVersion();
+
+        return $language === 'en'
+            ? "You are a technical assistant. Analyze Laravel/PHP errors and propose a short, practical fix. Project: Laravel {$laravelVersion}."
+            : "Sei un assistente tecnico. Analizza errori Laravel/PHP e proponi una soluzione breve e pratica. Progetto: Laravel {$laravelVersion}.";
+    }
+
+    private function getLaravelVersion(): string
+    {
+        try {
+            $version = app()->version();
+            return $version !== '' ? $version : 'unknown';
+        } catch (Throwable) {
+            return 'unknown';
+        }
     }
 }

@@ -1,6 +1,6 @@
 # Laravel AI Code Orchestrator
 
-Questo package intercetta gli errori di Laravel 11, raccoglie il contesto di codice, invia l'errore a un provider AI (OpenAI/Groq/Gemini) e invia una email all'amministratore con la soluzione suggerita. Gli errori vengono anche salvati in DB.
+Questo package intercetta gli errori di Laravel 11 o superiore, raccoglie il contesto di codice, invia l'errore a un provider AI (OpenAI/Groq/Gemini) e invia una email all'amministratore con la soluzione suggerita. Gli errori vengono anche salvati in DB.
 
 ## A cosa serve
 
@@ -21,7 +21,7 @@ AI_CODE_ORCHESTRATOR_QUEUE=default
 AI_CODE_ORCHESTRATOR_STORE_ERRORS=true
 ```
 
-Provider (esempio Gemini):
+Provider (consigliato Gemini):
 
 ```env
 GEMINI_API_KEY=your-gemini-key

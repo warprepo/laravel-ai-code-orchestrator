@@ -31,6 +31,4 @@ sudo supervisorctl status
 
 ## Notes
 
-- Verify the PHP path (`/usr/bin/php`) and the app path (`/mnt/linux-data/www/mira-park-manager`).
-- Make sure the user (`www-data`) has access to the files and the `storage/` directory.
 - If you use a different queue, update the `--queue=default` option.

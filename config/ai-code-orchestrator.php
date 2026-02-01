@@ -19,6 +19,7 @@ return [
         'provider' => env('AI_CODE_ORCHESTRATOR_PROVIDER', 'openai'),
         'language' => env('AI_CODE_ORCHESTRATOR_AI_LANGUAGE', 'it'),
         'timeout' => env('AI_CODE_ORCHESTRATOR_TIMEOUT', 15),
+        'system_prompt' => env('AI_CODE_ORCHESTRATOR_SYSTEM_PROMPT'),
         'context' => [
             'depth' => env('AI_CODE_ORCHESTRATOR_CONTEXT_DEPTH', 1),
             'snippet_lines' => env('AI_CODE_ORCHESTRATOR_SNIPPET_LINES', 30),
