@@ -14,6 +14,7 @@ class CodeContextBuilder
 
         $snippets = [];
         $traceLines = [];
+        $offendingLine = null;
 
         foreach ($frames as $frame) {
             $file = $frame['file'] ?? null;
@@ -25,6 +26,9 @@ class CodeContextBuilder
             }
 
             $traceLines[] = trim(($function ? $function.' ' : '').$this->relativePath($file).':'.$line);
+            if ($offendingLine === null) {
+                $offendingLine = $this->getLineText($file, (int) $line);
+            }
             $snippets[] = $this->buildSnippet($file, (int) $line, $snippetLines, $maxBlockLines, $stripComments);
         }
 
@@ -34,6 +38,7 @@ class CodeContextBuilder
         return [
             'code_context' => $contextText,
             'filtered_trace' => implode("\n", $traceLines),
+            'offending_line' => $offendingLine,
         ];
     }
 
@@ -123,6 +128,17 @@ class CodeContextBuilder
 
         return "File: ".$this->relativePath($file).":{$line}\n".
             "```\n".implode("\n", $snippet)."\n```";
+    }
+
+    private function getLineText(string $file, int $line): ?string
+    {
+        $lines = @file($file, FILE_IGNORE_NEW_LINES);
+
+        if (! is_array($lines) || $line < 1 || $line > count($lines)) {
+            return null;
+        }
+
+        return rtrim($lines[$line - 1]);
     }
 
     private function relativePath(string $file): string

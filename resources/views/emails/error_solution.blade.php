@@ -38,15 +38,8 @@
                                 <td style="padding:6px 0;">{{ $report->file }}:{{ $report->line }}</td>
                             </tr>
                             @php
-                                $offendingLine = null;
                                 $context = is_array($report->context ?? null) ? $report->context : [];
-                                $codeContext = $context['code_context'] ?? '';
-                                if (is_string($codeContext) && $codeContext !== '' && $report->line) {
-                                    $pattern = '/^\\s*'.preg_quote((string) $report->line, '/').'\\s*\\|\\s*(.+)$/m';
-                                    if (preg_match($pattern, $codeContext, $matches)) {
-                                        $offendingLine = $matches[1] ?? null;
-                                    }
-                                }
+                                $offendingLine = $context['offending_line'] ?? null;
                             @endphp
                             @if($offendingLine)
                                 <tr>

@@ -54,15 +54,15 @@ Run the queue worker with a process manager. Two options are supported: Supervis
 ### Supervisor
 
 Example config:
-`packages/warp/laravel-ai-code-orchestrator/supervisor/laravel-ai-orchestrator.conf`
+`packages/warp/laravel-ai-code-orchestrator/config/supervisor/laravel-ai-orchestrator.conf`
 
 Instructions:
-`packages/warp/laravel-ai-code-orchestrator/supervisor/README.md`
+`packages/warp/laravel-ai-code-orchestrator/config/supervisor/README.md`
 
 ### systemd
 
 Example unit file:
-`packages/warp/laravel-ai-code-orchestrator/systemd/laravel-ai-orchestrator.service`
+`packages/warp/laravel-ai-code-orchestrator/config/systemd/laravel-ai-orchestrator.service`
 
 Instructions:
-`packages/warp/laravel-ai-code-orchestrator/systemd/README.md`
+`packages/warp/laravel-ai-code-orchestrator/config/systemd/README.md`
