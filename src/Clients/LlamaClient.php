@@ -2,21 +2,25 @@
 
 namespace Warp\LaravelAiCodeOrchestrator\Clients;
 
+use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
 use Throwable;
+use Warp\LaravelAiCodeOrchestrator\Models\ErrorReport;
+use Warp\LaravelAiCodeOrchestrator\Support\LlamaIndexCache;
 
-class GroqClient implements AiClientInterface
+class LlamaClient implements AiClientInterface
 {
     public function analyze(Throwable $throwable, array $context): string
     {
-        $config = config('ai-code-orchestrator.ai.groq');
+        $config = config('ai-code-orchestrator.ai.llama');
         $baseUrl = rtrim($config['base_url'] ?? '', '/');
+        $apiKey = $config['api_key'] ?? '';
 
         $language = config('ai-code-orchestrator.ai.language', 'it');
         $systemPrompt = $this->resolveSystemPrompt($language);
 
         $payload = [
-            'model' => $config['model'] ?? 'llama-3.1-8b-instant',
+            'model' => $config['model'] ?? 'local-model',
             'temperature' => $config['temperature'] ?? 0.2,
             'max_tokens' => $config['max_tokens'] ?? 400,
             'messages' => [
@@ -31,7 +35,9 @@ class GroqClient implements AiClientInterface
             ],
         ];
 
-        $response = Http::withToken($config['api_key'] ?? '')
+        $client = $this->buildHttpClient($apiKey);
+
+        $response = $client
             ->timeout(config('ai-code-orchestrator.ai.timeout', 15))
             ->post($baseUrl.'/chat/completions', $payload);
 
@@ -51,10 +57,22 @@ class GroqClient implements AiClientInterface
         return 'AI empty response. Raw: '.($raw !== false ? $raw : 'unserializable');
     }
 
+    private function buildHttpClient(string $apiKey): PendingRequest
+    {
+        $client = Http::asJson();
+
+        if ($apiKey !== '') {
+            $client = $client->withToken($apiKey);
+        }
+
+        return $client;
+    }
+
     private function buildPrompt(Throwable $throwable, array $context): string
     {
         $trace = $context['filtered_trace'] ?? $throwable->getTraceAsString();
         $codeContext = $context['code_context'] ?? null;
+        $extraContext = $this->buildLlamaContext();
 
         return "Errore: {$throwable->getMessage()}\n".
             "Classe: ".get_class($throwable)."\n".
@@ -63,7 +81,8 @@ class GroqClient implements AiClientInterface
             "Metodo: ".($context['method'] ?? 'n/a')."\n".
             "Utente ID: ".($context['user_id'] ?? 'n/a')."\n".
             "Trace:\n{$trace}\n".
-            ($codeContext ? "\nContesto codice:\n{$codeContext}\n" : '');
+            ($codeContext ? "\nContesto codice:\n{$codeContext}\n" : '').
+            $extraContext;
     }
 
     private function resolveSystemPrompt(string $language): string
@@ -88,5 +107,82 @@ class GroqClient implements AiClientInterface
         } catch (Throwable) {
             return 'unknown';
         }
+    }
+
+    private function buildLlamaContext(): string
+    {
+        $sections = [];
+
+        $fileIndex = $this->getCachedFileIndex();
+        if ($fileIndex !== '') {
+            $sections[] = "Indice file (app/config/packages):\n".$fileIndex;
+        }
+
+        $previousErrors = $this->getPreviousErrorsContext();
+        if ($previousErrors !== '') {
+            $sections[] = "Errori precedenti:\n".$previousErrors;
+        }
+
+        if (count($sections) === 0) {
+            return '';
+        }
+
+        return "\n".implode("\n\n", $sections)."\n";
+    }
+
+    private function getCachedFileIndex(): string
+    {
+        $config = config('ai-code-orchestrator.ai.llama.file_index', []);
+        $cache = new LlamaIndexCache();
+        $data = $cache->getIndexData($config);
+
+        return (string) ($data['index'] ?? '');
+    }
+
+    private function getPreviousErrorsContext(): string
+    {
+        $config = config('ai-code-orchestrator.ai.llama.previous_errors', []);
+        $enabled = (bool) ($config['enabled'] ?? true);
+        if (! $enabled) {
+            return '';
+        }
+
+        $limit = (int) ($config['limit'] ?? 5);
+        $maxChars = (int) ($config['max_chars'] ?? 4000);
+
+        try {
+            $reports = ErrorReport::query()
+                ->whereNotNull('ai_solution')
+                ->where('ai_solution', '!=', '')
+                ->orderByDesc('id')
+                ->limit(max(1, $limit))
+                ->get(['message', 'exception_class', 'file', 'line', 'ai_solution']);
+
+            if ($reports->isEmpty()) {
+                return '';
+            }
+
+            $chunks = [];
+            foreach ($reports as $report) {
+                $chunks[] = "Errore: {$report->message}\n".
+                    "Classe: {$report->exception_class}\n".
+                    "File: {$report->file}:{$report->line}\n".
+                    "Soluzione: {$report->ai_solution}";
+            }
+
+            $text = implode("\n---\n", $chunks);
+            return $this->truncate($text, $maxChars);
+        } catch (Throwable) {
+            return '';
+        }
+    }
+
+    private function truncate(string $text, int $maxChars): string
+    {
+        if ($maxChars <= 0 || mb_strlen($text) <= $maxChars) {
+            return $text;
+        }
+
+        return mb_substr($text, 0, $maxChars)."\n... [truncated]";
     }
 }

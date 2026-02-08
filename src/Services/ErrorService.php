@@ -8,6 +8,7 @@ use Warp\LaravelAiCodeOrchestrator\Clients\AiClientInterface;
 use Warp\LaravelAiCodeOrchestrator\Jobs\SendErrorSolutionJob;
 use Warp\LaravelAiCodeOrchestrator\Models\ErrorReport;
 use Warp\LaravelAiCodeOrchestrator\Support\CodeContextBuilder;
+use Warp\LaravelAiCodeOrchestrator\Support\LlamaIndexCache;
 
 class ErrorService
 {
@@ -56,7 +57,25 @@ class ErrorService
         $stripComments = (bool) config('ai-code-orchestrator.ai.context.strip_comments', true);
         $excludeGlobs = (array) config('ai-code-orchestrator.ai.context.exclude_globs', []);
 
-        return array_merge($context, $builder->build($throwable, $snippetLines, $depth, $maxChars, $maxFrames, $maxBlockLines, $stripComments, $excludeGlobs));
+        $context = array_merge($context, $builder->build($throwable, $snippetLines, $depth, $maxChars, $maxFrames, $maxBlockLines, $stripComments, $excludeGlobs));
+
+        return $this->addLlamaIndexStats($context);
+    }
+
+    private function addLlamaIndexStats(array $context): array
+    {
+        $provider = config('ai-code-orchestrator.ai.provider', 'openai');
+        if ($provider !== 'llama') {
+            return $context;
+        }
+
+        $config = config('ai-code-orchestrator.ai.llama.file_index', []);
+        $cache = new LlamaIndexCache();
+        $data = $cache->getIndexData($config);
+
+        $context['llama_file_index_count'] = (int) ($data['count'] ?? 0);
+
+        return $context;
     }
 
     private function storeReport(Throwable $throwable, array $context): ?ErrorReport

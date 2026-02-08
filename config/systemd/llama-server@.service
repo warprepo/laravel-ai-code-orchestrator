@@ -1,0 +1,20 @@
+[Unit]
+Description=llama.cpp server (local only) for %i
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/llama.cpp
+ExecStart=/home/%i/llama.cpp/build/bin/llama-server \
+  -m /home/%i/llama.cpp/models/qwen2.5-coder-7b-q4_k_m.gguf \
+  --host 127.0.0.1 \
+  --port 8080 \
+  --ctx-size 4096 \
+  --threads 8 \
+  --alias local-model
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,7 @@ use Throwable;
 use Warp\LaravelAiCodeOrchestrator\Clients\AiClientInterface;
 use Warp\LaravelAiCodeOrchestrator\Clients\GeminiClient;
 use Warp\LaravelAiCodeOrchestrator\Clients\GroqClient;
+use Warp\LaravelAiCodeOrchestrator\Clients\LlamaClient;
 use Warp\LaravelAiCodeOrchestrator\Clients\NullAiClient;
 use Warp\LaravelAiCodeOrchestrator\Clients\OpenAiClient;
 use Warp\LaravelAiCodeOrchestrator\Console\ReportErrorCommand;
@@ -27,6 +28,7 @@ class LaravelAiCodeOrchestratorServiceProvider extends ServiceProvider
                 'openai' => new OpenAiClient(),
                 'groq' => new GroqClient(),
                 'gemini' => new GeminiClient(),
+                'llama' => new LlamaClient(),
                 default => new NullAiClient(),
             };
         });

@@ -62,7 +62,46 @@ return [
             'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
             'model' => env('GEMINI_MODEL', 'gemini-flash-lite-latest'),
             'temperature' => env('GEMINI_TEMPERATURE', 0.2),
-            'max_output_tokens' => env('GEMINI_MAX_OUTPUT_TOKENS', 8192),
+            'max_tokens' => env('GEMINI_MAX_TOKENS', env('GEMINI_MAX_OUTPUT_TOKENS', 8192)),
+        ],
+
+        'llama' => [
+            'api_key' => env('LLAMA_API_KEY'),
+            'base_url' => env('LLAMA_BASE_URL', 'http://127.0.0.1:8080/v1'),
+            'model' => env('LLAMA_MODEL', 'local-model'),
+            'temperature' => env('LLAMA_TEMPERATURE', 0.2),
+            'max_tokens' => env('LLAMA_MAX_TOKENS', 2000),
+            'file_index' => [
+                'enabled' => env('LLAMA_INDEX_ENABLED', true),
+                'cache_key' => env('LLAMA_INDEX_CACHE_KEY', 'ai-code-orchestrator.llama.file_index'),
+                'cache_seconds' => env('LLAMA_INDEX_CACHE_SECONDS', 3600),
+                'roots' => [
+                    'app',
+                    'config',
+                    'packages',
+                ],
+                'extensions' => [
+                    'php',
+                    'blade.php',
+                    'json',
+                    'yml',
+                    'yaml',
+                ],
+                'exclude_globs' => [
+                    'vendor/**',
+                    'node_modules/**',
+                    'storage/**',
+                    'bootstrap/cache/**',
+                    'tests/**',
+                ],
+                'max_files' => env('LLAMA_INDEX_MAX_FILES', 2000),
+                'max_chars' => env('LLAMA_INDEX_MAX_CHARS', 6000),
+            ],
+            'previous_errors' => [
+                'enabled' => env('LLAMA_PREVIOUS_ERRORS_ENABLED', true),
+                'limit' => env('LLAMA_PREVIOUS_ERRORS_LIMIT', 5),
+                'max_chars' => env('LLAMA_PREVIOUS_ERRORS_MAX_CHARS', 4000),
+            ],
         ],
     ],
 ];

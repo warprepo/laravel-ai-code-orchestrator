@@ -15,7 +15,7 @@ class ReportErrorCommand extends Command
         {--url= : URL della richiesta}
         {--method= : Metodo HTTP}
         {--user_id= : ID utente}
-        {--provider= : Provider AI (openai|groq|gemini)}
+        {--provider= : Provider AI (openai|groq|gemini|llama)}
         {--language= : Lingua risposta AI (it|en)}
     ';
 

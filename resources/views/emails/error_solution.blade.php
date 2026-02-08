@@ -47,6 +47,12 @@
                                     <td style="padding:6px 0;">{{ $offendingLine }}</td>
                                 </tr>
                             @endif
+                            @if(isset($context['llama_file_index_count']) && $context['llama_file_index_count'] > 0)
+                                <tr>
+                                    <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Indexed files' : 'File indicizzati' }}</td>
+                                    <td style="padding:6px 0;">{{ $context['llama_file_index_count'] }}</td>
+                                </tr>
+                            @endif
                             <tr>
                                 <td style="padding:6px 0;color:#6b7280;">URL</td>
                                 <td style="padding:6px 0;">{{ $report->url }}</td>
@@ -64,8 +70,12 @@
                         <h3 style="margin:0 0 12px;font-size:16px;">
                             {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'AI Suggested Fix' : 'Soluzione suggerita dall’AI' }}
                         </h3>
-                        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font-size:13px;white-space:pre-wrap;">
-                            {{ $report->ai_solution }}
+                        @php
+                            $solution = (string) ($report->ai_solution ?? '');
+                            $isHtml = $solution !== strip_tags($solution);
+                        @endphp
+                        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font-size:13px;">
+                            {!! $isHtml ? $solution : nl2br(e($solution)) !!}
                         </div>
                     </td>
                 </tr>
