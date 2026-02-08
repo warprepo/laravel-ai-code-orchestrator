@@ -162,3 +162,7 @@ Unit file di esempio:
 
 Istruzioni:
 `packages/warp/laravel-ai-code-orchestrator/config/systemd/README.md`
+
+## Esempio email
+
+![Esempio email](images/email.png)
