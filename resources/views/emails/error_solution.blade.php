@@ -94,6 +94,12 @@
                         </h3>
                         @php
                             $solution = (string) ($report->ai_solution ?? '');
+                            $solution = preg_replace('/\s*\.\.\.\s*\[truncated\]\s*/i', "\n", $solution) ?? $solution;
+                            $solution = preg_replace('/\s*\[truncated\]\s*/i', "\n", $solution) ?? $solution;
+                            $solution = preg_replace('/```(?:patch|diff)\s*.*?```/is', '', $solution) ?? $solution;
+                            $solution = preg_replace('/```html\s*(.*?)```/is', '$1', $solution) ?? $solution;
+                            $solution = preg_replace('/<p>\s*Causa:.*?<\/p>/is', '', $solution) ?? $solution;
+                            $solution = preg_replace('/(?:^|\n)\s*Causa:\s.*?(?=\n\s*Soluzione:|\z)/is', '', $solution) ?? $solution;
                             $isHtml = $solution !== strip_tags($solution);
                         @endphp
                         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font-size:13px;">

@@ -12,7 +12,7 @@ use Warp\LaravelAiCodeOrchestrator\Support\LlamaIndexCache;
 class LlamaClient implements AiClientInterface
 {
     private const int DEFAULT_TIMEOUT_SECONDS = 180;
-    private const int DEFAULT_MAX_TOKENS = 400;
+    private const int DEFAULT_MAX_TOKENS = 900;
     private const int DEFAULT_INDEX_MAX_FILES = 10;
     private const int DEFAULT_INDEX_MAX_CHARS = 1000;
     private const int DEFAULT_PREVIOUS_ERRORS_MAX_CHARS = 1500;
@@ -160,8 +160,8 @@ class LlamaClient implements AiClientInterface
         $laravelVersion = $this->getLaravelVersion();
 
         return $language === 'en'
-            ? "You are a technical assistant. Be concise. Do not repeat the error or stack trace. Provide only root cause and a practical fix. First respond in HTML (use <strong> and <ul><li>), then append a fenced ```patch``` block with a unified diff that can be applied with git apply when possible. Project: Laravel {$laravelVersion}."
-            : "Sei un assistente tecnico. Sii conciso. Non ripetere errore o stack trace. Fornisci solo causa e soluzione pratica. Rispondi prima in HTML (usa <strong> e <ul><li>), poi aggiungi un blocco ```patch``` con una unified diff applicabile con git apply quando possibile. Progetto: Laravel {$laravelVersion}.";
+            ? "You are a technical assistant. Be concise. Do not repeat the error or stack trace. Provide only practical fix steps. Do not include a 'Cause' section. Respond in clean HTML only (use <strong> and <ul><li>) with no Markdown, no code fences, and no patch blocks."
+            : "Sei un assistente tecnico. Sii conciso. Non ripetere errore o stack trace. Fornisci solo i passaggi di soluzione pratica. Non includere la sezione 'Causa'. Rispondi solo in HTML pulito (usa <strong> e <ul><li>), senza Markdown, senza blocchi di codice e senza patch.";
     }
 
     private function getLaravelVersion(): string
@@ -270,7 +270,7 @@ class LlamaClient implements AiClientInterface
     {
         $configured = isset($config['max_tokens']) ? (int) $config['max_tokens'] : self::DEFAULT_MAX_TOKENS;
 
-        return max(32, min(self::DEFAULT_MAX_TOKENS, $configured));
+        return max(64, min(self::DEFAULT_MAX_TOKENS, $configured));
     }
 
     private function buildRequestId(): string

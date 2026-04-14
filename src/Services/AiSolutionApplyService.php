@@ -289,65 +289,107 @@ class AiSolutionApplyService
         $timeout = max(10, $timeout);
 
         $prompt = $this->buildPatchOnlyPrompt($report);
-        $payload = [
-            'model' => $model,
-            'temperature' => 0.1,
-            'max_tokens' => 500,
-            'messages' => [
-                [
-                    'role' => 'system',
-                    'content' => 'Return only one fenced ```patch``` block with unified diff. Do not add explanations.',
-                ],
-                [
-                    'role' => 'user',
-                    'content' => $prompt,
-                ],
-            ],
-        ];
+        $maxTokenAttempts = [900, 1400, 1800];
 
-        $client = Http::asJson();
-        if ($apiKey !== '') {
-            $client = $client->withToken($apiKey);
-        }
-
-        try {
-            $response = $client
-                ->timeout($timeout)
-                ->post($baseUrl.'/chat/completions', $payload);
-        } catch (Throwable $e) {
+        foreach ($maxTokenAttempts as $maxTokens) {
             if ($this->shouldLogDebug()) {
-                Log::warning('ai_orchestrator.apply.patch_fallback.exception', [
+                Log::info('ai_orchestrator.apply.patch_fallback.start', [
                     'report_id' => $report->id,
-                    'error_class' => $e::class,
-                    'error' => $e->getMessage(),
+                    'max_tokens' => $maxTokens,
+                    'model' => $model,
+                    'timeout_seconds' => $timeout,
                 ]);
             }
 
-            return null;
-        }
+            $payload = [
+                'model' => $model,
+                'temperature' => 0.1,
+                'max_tokens' => $maxTokens,
+                'messages' => [
+                    [
+                        'role' => 'system',
+                        'content' => 'Return only one fenced ```patch``` block with a complete unified diff. Never use placeholders like "... [truncated]". Do not add explanations.',
+                    ],
+                    [
+                        'role' => 'user',
+                        'content' => $prompt,
+                    ],
+                ],
+            ];
 
-        if (! $response->successful()) {
+            $client = Http::asJson();
+            if ($apiKey !== '') {
+                $client = $client->withToken($apiKey);
+            }
+
+            try {
+                $response = $client
+                    ->timeout($timeout)
+                    ->post($baseUrl.'/chat/completions', $payload);
+            } catch (Throwable $e) {
+                if ($this->shouldLogDebug()) {
+                    Log::warning('ai_orchestrator.apply.patch_fallback.exception', [
+                        'report_id' => $report->id,
+                        'max_tokens' => $maxTokens,
+                        'error_class' => $e::class,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+
+                continue;
+            }
+
+            if (! $response->successful()) {
+                if ($this->shouldLogDebug()) {
+                    Log::warning('ai_orchestrator.apply.patch_fallback.failed', [
+                        'report_id' => $report->id,
+                        'max_tokens' => $maxTokens,
+                        'status' => $response->status(),
+                        'body_preview' => mb_substr($response->body(), 0, 1000),
+                    ]);
+                }
+
+                continue;
+            }
+
+            $content = (string) data_get($response->json(), 'choices.0.message.content', '');
+            $patch = $this->extractPatch($content);
+            $json = $response->json();
+
+            if ($patch === null || $this->hasTruncationMarker($patch)) {
+                if ($this->shouldLogDebug()) {
+                    Log::warning('ai_orchestrator.apply.patch_fallback.truncated_or_empty', [
+                        'report_id' => $report->id,
+                        'max_tokens' => $maxTokens,
+                        'response_chars' => mb_strlen($content),
+                        'finish_reason' => data_get($json, 'choices.0.finish_reason'),
+                        'usage_prompt_tokens' => data_get($json, 'usage.prompt_tokens'),
+                        'usage_completion_tokens' => data_get($json, 'usage.completion_tokens'),
+                        'usage_total_tokens' => data_get($json, 'usage.total_tokens'),
+                        'content_preview' => mb_substr($content, 0, 2000),
+                    ]);
+                }
+
+                continue;
+            }
+
             if ($this->shouldLogDebug()) {
-                Log::warning('ai_orchestrator.apply.patch_fallback.failed', [
+                Log::info('ai_orchestrator.apply.patch_fallback.success', [
                     'report_id' => $report->id,
-                    'status' => $response->status(),
-                    'body_preview' => mb_substr($response->body(), 0, 1000),
+                    'max_tokens' => $maxTokens,
+                    'response_chars' => mb_strlen($content),
+                    'finish_reason' => data_get($json, 'choices.0.finish_reason'),
+                    'usage_prompt_tokens' => data_get($json, 'usage.prompt_tokens'),
+                    'usage_completion_tokens' => data_get($json, 'usage.completion_tokens'),
+                    'usage_total_tokens' => data_get($json, 'usage.total_tokens'),
+                    'content_preview' => mb_substr($content, 0, 2000),
                 ]);
             }
 
-            return null;
+            return $patch;
         }
 
-        $content = (string) data_get($response->json(), 'choices.0.message.content', '');
-
-        if ($this->shouldLogDebug()) {
-            Log::info('ai_orchestrator.apply.patch_fallback.success', [
-                'report_id' => $report->id,
-                'response_chars' => mb_strlen($content),
-            ]);
-        }
-
-        return $this->extractPatch($content);
+        return null;
     }
 
     private function buildPatchOnlyPrompt(ErrorReport $report): string
@@ -362,6 +404,7 @@ class AiSolutionApplyService
             "- Output only one fenced block: ```patch ... ```\n".
             "- Include valid file headers (---/+++), and @@ hunks.\n".
             "- Modify only project files under app/, config/, packages/, resources/.\n".
+            "- Use exact existing file paths from the project; do not invent or shorten package paths.\n".
             "- Keep patch minimal and safe.\n\n".
             "Error message: {$report->message}\n".
             "Exception class: {$report->exception_class}\n".
@@ -369,7 +412,7 @@ class AiSolutionApplyService
             "Offending line: {$offendingLine}\n".
             "Trace:\n{$trace}\n\n".
             ($codeContext !== '' ? "Code context:\n{$codeContext}\n\n" : '').
-            "Current AI analysis:\n".(string) ($report->ai_solution ?? '');
+            "Do not output analysis. Output only one complete ```patch``` block.";
     }
 
     private function extractPatch(string $solution): ?string
@@ -405,9 +448,17 @@ class AiSolutionApplyService
         $patch = preg_replace('/[\x{200B}\x{200C}\x{200D}\x{FEFF}]/u', '', $patch) ?? $patch;
         $patch = preg_replace('/^```(?:patch|diff)?\s*/i', '', $patch) ?? $patch;
         $patch = preg_replace('/```$/', '', $patch) ?? $patch;
+        $patch = str_replace('packages/laravel-ai-code-orchestrator/', 'packages/warp/laravel-ai-code-orchestrator/', $patch);
         $patch = ltrim($patch, "\n");
 
         return rtrim($patch)."\n";
+    }
+
+    private function hasTruncationMarker(string $patch): bool
+    {
+        $haystack = strtolower($patch);
+
+        return str_contains($haystack, '... [truncated]') || str_contains($haystack, '[truncated]');
     }
 
     private function shouldLogDebug(): bool
