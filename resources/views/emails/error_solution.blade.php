@@ -31,27 +31,6 @@
                             ]);
                         @endphp
 
-                        @if(! $isProductionEnv)
-                            <div style="margin:0 0 16px;padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;">
-                                <strong style="font-size:13px;color:#92400e;">
-                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Non-production mode' : 'Modalita non produzione' }}
-                                </strong>
-                                <p style="margin:8px 0 0;font-size:13px;color:#78350f;">
-                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply the AI patch directly from this report.' : 'Applica la patch AI direttamente da questo report.' }}
-                                </p>
-                                @if($applyToken !== '')
-                                    <a href="{{ $applyUrl }}"
-                                       style="display:inline-block;margin-top:10px;padding:9px 14px;border-radius:6px;background:#1f2937;color:#fff;text-decoration:none;font-size:13px;">
-                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply AI Fix' : 'Applica Fix AI' }}
-                                    </a>
-                                @else
-                                    <p style="margin:10px 0 0;font-size:12px;color:#991b1b;">
-                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Missing manual report token: action disabled.' : 'Token manual report mancante: azione disabilitata.' }}
-                                    </p>
-                                @endif
-                            </div>
-                        @endif
-
                         <h3 style="margin:0 0 12px;font-size:16px;">
                             {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Error Details' : 'Dettagli errore' }}
                         </h3>
@@ -120,6 +99,27 @@
                         <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:6px;padding:12px;font-size:13px;">
                             {!! $isHtml ? $solution : nl2br(e($solution)) !!}
                         </div>
+
+                        @if(! $isProductionEnv)
+                            <div style="margin:16px 0 0;padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;">
+                                <strong style="font-size:13px;color:#92400e;">
+                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Non-production mode' : 'Modalita non produzione' }}
+                                </strong>
+                                <p style="margin:8px 0 0;font-size:13px;color:#78350f;">
+                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply the AI patch directly from this report.' : 'Applica la patch AI direttamente da questo report.' }}
+                                </p>
+                                @if($applyToken !== '')
+                                    <a href="{{ $applyUrl }}"
+                                       style="display:inline-block;margin-top:10px;padding:9px 14px;border-radius:6px;background:#1f2937;color:#fff;text-decoration:none;font-size:13px;">
+                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply AI Fix' : 'Applica Fix AI' }}
+                                    </a>
+                                @else
+                                    <p style="margin:10px 0 0;font-size:12px;color:#991b1b;">
+                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Missing manual report token: action disabled.' : 'Token manual report mancante: azione disabilitata.' }}
+                                    </p>
+                                @endif
+                            </div>
+                        @endif
                     </td>
                 </tr>
                 <tr>
