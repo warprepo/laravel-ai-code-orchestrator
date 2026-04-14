@@ -25,18 +25,49 @@ class AiSolutionApplyService
 
         $branchName = $gitSetup['branch'];
         $solution = (string) ($report->ai_solution ?? '');
-        $patch = $this->extractPatch($solution);
-        $patchSource = 'stored_solution';
+        $storedPatch = $this->extractPatch($solution);
+        $fallbackError = null;
+
+        $patch = null;
+        $patchSource = null;
+        $storedError = null;
+
+        if ($storedPatch !== null) {
+            $storedPatch = $this->normalizePatch($storedPatch);
+            $storedValidation = $this->validatePatch($storedPatch, $report->id);
+
+            if ($storedValidation['ok']) {
+                $patch = $storedPatch;
+                $patchSource = 'stored_solution';
+            } else {
+                $storedError = $storedValidation['error'];
+            }
+        } else {
+            $storedError = 'Nessuna patch trovata nella risposta AI.';
+        }
 
         if ($patch === null) {
-            $patch = $this->generatePatchWithLlama($report);
-            $patchSource = 'llama_fallback';
+            $fallbackPatch = $this->generatePatchWithLlama($report);
+            if ($fallbackPatch !== null) {
+                $fallbackPatch = $this->normalizePatch($fallbackPatch);
+                $fallbackValidation = $this->validatePatch($fallbackPatch, $report->id);
+                if ($fallbackValidation['ok']) {
+                    $patch = $fallbackPatch;
+                    $patchSource = 'llama_fallback';
+                } else {
+                    $fallbackError = $fallbackValidation['error'];
+                }
+            } else {
+                $fallbackError = 'Fallback patch-only non ha restituito una patch valida.';
+            }
         }
 
         if ($patch === null) {
             return [
                 'ok' => false,
-                'message' => 'Nessuna patch trovata nella risposta AI e fallback Llama non riuscito.',
+                'message' => 'Impossibile ottenere una patch valida.',
+                'stored_error' => $storedError,
+                'fallback_error' => $fallbackError,
                 'branch' => $branchName,
             ];
         }
@@ -46,17 +77,6 @@ class AiSolutionApplyService
 
         $patchFile = $patchDir.'/report-'.$report->id.'-'.date('Ymd_His').'.patch';
         File::put($patchFile, $patch);
-
-        $checkResult = $this->runGitApplyCheck($patchFile);
-        if (! $checkResult['ok']) {
-            return [
-                'ok' => false,
-                'message' => 'Patch non valida: '.$checkResult['error'],
-                'patch_file' => $patchFile,
-                'patch_source' => $patchSource,
-                'branch' => $branchName,
-            ];
-        }
 
         $applyProcess = new Process([
             'git',
@@ -98,6 +118,18 @@ class AiSolutionApplyService
             'branch' => $branchName,
             'commit' => $commitResult['commit'],
         ];
+    }
+
+    private function validatePatch(string $patch, int $reportId): array
+    {
+        $patchDir = storage_path('app/ai-code-orchestrator/patches');
+        File::ensureDirectoryExists($patchDir);
+        $tmpFile = $patchDir.'/report-'.$reportId.'-validation-'.date('Ymd_His').'-'.bin2hex(random_bytes(3)).'.patch';
+        File::put($tmpFile, $patch);
+
+        $result = $this->runGitApplyCheck($tmpFile);
+
+        return $result;
     }
 
     private function prepareFixBranch(ErrorReport $report): array
@@ -364,6 +396,18 @@ class AiSolutionApplyService
         }
 
         return null;
+    }
+
+    private function normalizePatch(string $patch): string
+    {
+        $patch = str_replace(["\r\n", "\r"], "\n", $patch);
+        $patch = preg_replace('/^\xEF\xBB\xBF/', '', $patch) ?? $patch;
+        $patch = preg_replace('/[\x{200B}\x{200C}\x{200D}\x{FEFF}]/u', '', $patch) ?? $patch;
+        $patch = preg_replace('/^```(?:patch|diff)?\s*/i', '', $patch) ?? $patch;
+        $patch = preg_replace('/```$/', '', $patch) ?? $patch;
+        $patch = ltrim($patch, "\n");
+
+        return rtrim($patch)."\n";
     }
 
     private function shouldLogDebug(): bool
