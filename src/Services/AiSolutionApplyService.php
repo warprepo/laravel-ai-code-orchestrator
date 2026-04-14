@@ -56,6 +56,18 @@ class AiSolutionApplyService
                     $patchSource = 'llama_fallback';
                 } else {
                     $fallbackError = $fallbackValidation['error'];
+                    $retryPatch = $this->generatePatchWithLlama($report, $fallbackError);
+                    if ($retryPatch !== null) {
+                        $retryPatch = $this->normalizePatch($retryPatch);
+                        $retryValidation = $this->validatePatch($retryPatch, $report->id);
+                        if ($retryValidation['ok']) {
+                            $patch = $retryPatch;
+                            $patchSource = 'llama_fallback_retry';
+                            $fallbackError = null;
+                        } else {
+                            $fallbackError = $retryValidation['error'];
+                        }
+                    }
                 }
             } else {
                 $fallbackError = 'Fallback patch-only non ha restituito una patch valida.';
@@ -274,7 +286,7 @@ class AiSolutionApplyService
         ];
     }
 
-    private function generatePatchWithLlama(ErrorReport $report): ?string
+    private function generatePatchWithLlama(ErrorReport $report, ?string $previousApplyError = null): ?string
     {
         $config = (array) config('ai-code-orchestrator.ai.llama', []);
         $baseUrl = rtrim((string) ($config['base_url'] ?? ''), '/');
@@ -288,7 +300,8 @@ class AiSolutionApplyService
         $timeout = (int) config('ai-code-orchestrator.ai.timeout', self::DEFAULT_TIMEOUT_SECONDS);
         $timeout = max(10, $timeout);
 
-        $prompt = $this->buildPatchOnlyPrompt($report);
+        $prompt = $this->buildPatchOnlyPrompt($report, $previousApplyError);
+        $fileExcerpt = $this->getCurrentFileExcerpt((string) $report->file, (int) $report->line);
         $maxTokenAttempts = [900, 1400, 1800];
 
         foreach ($maxTokenAttempts as $maxTokens) {
@@ -298,6 +311,9 @@ class AiSolutionApplyService
                     'max_tokens' => $maxTokens,
                     'model' => $model,
                     'timeout_seconds' => $timeout,
+                    'prompt_chars' => mb_strlen($prompt),
+                    'file_excerpt_chars' => mb_strlen($fileExcerpt),
+                    'file_excerpt_preview' => mb_substr($fileExcerpt, 0, 500),
                 ]);
             }
 
@@ -392,12 +408,14 @@ class AiSolutionApplyService
         return null;
     }
 
-    private function buildPatchOnlyPrompt(ErrorReport $report): string
+    private function buildPatchOnlyPrompt(ErrorReport $report, ?string $previousApplyError = null): string
     {
         $context = is_array($report->context ?? null) ? $report->context : [];
         $trace = (string) ($context['filtered_trace'] ?? $report->trace ?? '');
         $codeContext = (string) ($context['code_context'] ?? '');
         $offendingLine = (string) ($context['offending_line'] ?? '');
+        $currentFileExcerpt = $this->getCurrentFileExcerpt((string) $report->file, (int) $report->line);
+        $applyErrorSection = $previousApplyError ? "\nPrevious apply error:\n{$previousApplyError}\n" : '';
 
         return "Generate a unified diff patch for this Laravel issue.\n".
             "Rules:\n".
@@ -405,6 +423,7 @@ class AiSolutionApplyService
             "- Include valid file headers (---/+++), and @@ hunks.\n".
             "- Modify only project files under app/, config/, packages/, resources/.\n".
             "- Use exact existing file paths from the project; do not invent or shorten package paths.\n".
+            "- Use the exact current code context provided below and keep unchanged lines intact.\n".
             "- Keep patch minimal and safe.\n\n".
             "Error message: {$report->message}\n".
             "Exception class: {$report->exception_class}\n".
@@ -412,7 +431,33 @@ class AiSolutionApplyService
             "Offending line: {$offendingLine}\n".
             "Trace:\n{$trace}\n\n".
             ($codeContext !== '' ? "Code context:\n{$codeContext}\n\n" : '').
+            ($currentFileExcerpt !== '' ? "Current file excerpt:\n{$currentFileExcerpt}\n\n" : '').
+            $applyErrorSection.
             "Do not output analysis. Output only one complete ```patch``` block.";
+    }
+
+    private function getCurrentFileExcerpt(string $file, int $line): string
+    {
+        if ($file === '' || ! is_file($file)) {
+            return '';
+        }
+
+        $lines = @file($file, FILE_IGNORE_NEW_LINES);
+        if (! is_array($lines) || $line < 1) {
+            return '';
+        }
+
+        $start = max(1, $line - 25);
+        $end = min(count($lines), $line + 25);
+        $slice = array_slice($lines, $start - 1, $end - $start + 1);
+
+        $formatted = [];
+        foreach ($slice as $idx => $content) {
+            $n = $start + $idx;
+            $formatted[] = str_pad((string) $n, 5, ' ', STR_PAD_LEFT).' | '.$content;
+        }
+
+        return implode("\n", $formatted);
     }
 
     private function extractPatch(string $solution): ?string
