@@ -21,10 +21,53 @@
                 </tr>
                 <tr>
                     <td style="padding:24px;">
+                        @php
+                            $environmentName = strtolower((string) app()->environment());
+                            $isProductionEnv = str_contains($environmentName, 'production');
+                            $applyToken = (string) config('ai-code-orchestrator.manual_report_token', '');
+                            $applyUrl = route('ai-code-orchestrator.apply-solution', [
+                                'report' => $report->id,
+                                'token' => $applyToken,
+                            ]);
+                        @endphp
+
+                        @if(! $isProductionEnv)
+                            <div style="margin:0 0 16px;padding:12px;border:1px solid #fde68a;background:#fffbeb;border-radius:6px;">
+                                <strong style="font-size:13px;color:#92400e;">
+                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Non-production mode' : 'Modalita non produzione' }}
+                                </strong>
+                                <p style="margin:8px 0 0;font-size:13px;color:#78350f;">
+                                    {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply the AI patch directly from this report.' : 'Applica la patch AI direttamente da questo report.' }}
+                                </p>
+                                @if($applyToken !== '')
+                                    <a href="{{ $applyUrl }}"
+                                       style="display:inline-block;margin-top:10px;padding:9px 14px;border-radius:6px;background:#1f2937;color:#fff;text-decoration:none;font-size:13px;">
+                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Apply AI Fix' : 'Applica Fix AI' }}
+                                    </a>
+                                @else
+                                    <p style="margin:10px 0 0;font-size:12px;color:#991b1b;">
+                                        {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Missing manual report token: action disabled.' : 'Token manual report mancante: azione disabilitata.' }}
+                                    </p>
+                                @endif
+                            </div>
+                        @endif
+
                         <h3 style="margin:0 0 12px;font-size:16px;">
                             {{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Error Details' : 'Dettagli errore' }}
                         </h3>
                         <table width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+                            <tr>
+                                <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Report ID' : 'ID Report' }}</td>
+                                <td style="padding:6px 0;">#{{ $report->id }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Created at' : 'Creato il' }}</td>
+                                <td style="padding:6px 0;">{{ optional($report->created_at)->toDateTimeString() }}</td>
+                            </tr>
+                            <tr>
+                                <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Status' : 'Stato' }}</td>
+                                <td style="padding:6px 0;">{{ $report->status }}</td>
+                            </tr>
                             <tr>
                                 <td style="padding:6px 0;color:#6b7280;">{{ config('ai-code-orchestrator.ai.language') === 'en' ? 'Message' : 'Messaggio' }}</td>
                                 <td style="padding:6px 0;">{{ $report->message }}</td>

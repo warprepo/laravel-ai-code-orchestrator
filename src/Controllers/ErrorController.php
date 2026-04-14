@@ -4,6 +4,9 @@ namespace Warp\LaravelAiCodeOrchestrator\Controllers;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Warp\LaravelAiCodeOrchestrator\Models\ErrorReport;
+use Warp\LaravelAiCodeOrchestrator\Services\AiSolutionApplyService;
 use Warp\LaravelAiCodeOrchestrator\Services\ErrorService;
 
 class ErrorController extends Controller
@@ -34,5 +37,36 @@ class ErrorController extends Controller
         $this->errorService->handleThrowable($throwable, $context);
 
         return response()->json(['status' => 'ok']);
+    }
+
+    public function applySolution(Request $request, int $report, AiSolutionApplyService $applyService)
+    {
+        if ($this->isProductionEnv()) {
+            return response('Operazione non consentita in produzione.', 403);
+        }
+
+        $token = (string) config('ai-code-orchestrator.manual_report_token', '');
+        $incomingToken = (string) $request->query('token', '');
+
+        if ($token === '' || ! hash_equals($token, $incomingToken)) {
+            return response('Unauthorized', 401);
+        }
+
+        $errorReport = ErrorReport::findOrFail($report);
+        $result = $applyService->apply($errorReport);
+        $status = $result['ok'] ? 200 : 422;
+
+        return response()->json([
+            'report_id' => $errorReport->id,
+            'status' => $errorReport->status,
+            'result' => $result,
+        ], $status);
+    }
+
+    private function isProductionEnv(): bool
+    {
+        $env = strtolower((string) app()->environment());
+
+        return Str::contains($env, 'production');
     }
 }

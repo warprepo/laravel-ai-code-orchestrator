@@ -4,25 +4,37 @@ namespace Warp\LaravelAiCodeOrchestrator\Clients;
 
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Throwable;
 use Warp\LaravelAiCodeOrchestrator\Models\ErrorReport;
 use Warp\LaravelAiCodeOrchestrator\Support\LlamaIndexCache;
 
 class LlamaClient implements AiClientInterface
 {
+    private const int DEFAULT_TIMEOUT_SECONDS = 180;
+    private const int DEFAULT_MAX_TOKENS = 400;
+    private const int DEFAULT_INDEX_MAX_FILES = 10;
+    private const int DEFAULT_INDEX_MAX_CHARS = 1000;
+    private const int DEFAULT_PREVIOUS_ERRORS_MAX_CHARS = 1500;
+
     public function analyze(Throwable $throwable, array $context): string
     {
         $config = config('ai-code-orchestrator.ai.llama');
         $baseUrl = rtrim($config['base_url'] ?? '', '/');
         $apiKey = $config['api_key'] ?? '';
+        $endpoint = $baseUrl.'/chat/completions';
+        $timeoutSeconds = $this->resolveTimeout();
+        $requestId = $this->buildRequestId();
 
         $language = config('ai-code-orchestrator.ai.language', 'it');
         $systemPrompt = $this->resolveSystemPrompt($language);
+        $userPrompt = $this->buildPrompt($throwable, $context);
+        $maxTokens = $this->resolveMaxTokens($config);
 
         $payload = [
             'model' => $config['model'] ?? 'local-model',
             'temperature' => $config['temperature'] ?? 0.2,
-            'max_tokens' => $config['max_tokens'] ?? 400,
+            'max_tokens' => $maxTokens,
             'messages' => [
                 [
                     'role' => 'system',
@@ -30,23 +42,76 @@ class LlamaClient implements AiClientInterface
                 ],
                 [
                     'role' => 'user',
-                    'content' => $this->buildPrompt($throwable, $context),
+                    'content' => $userPrompt,
                 ],
             ],
         ];
 
-        $client = $this->buildHttpClient($apiKey);
+        if ($this->shouldLogDebug()) {
+            Log::info('ai_orchestrator.llama.request.start', [
+                'request_id' => $requestId,
+                'endpoint' => $endpoint,
+                'timeout_seconds' => $timeoutSeconds,
+                'model' => $payload['model'],
+                'max_tokens' => $maxTokens,
+                'temperature' => $payload['temperature'],
+                'system_prompt_chars' => mb_strlen($systemPrompt),
+                'user_prompt_chars' => mb_strlen($userPrompt),
+                'trace_chars' => mb_strlen((string) ($context['filtered_trace'] ?? '')),
+                'code_context_chars' => mb_strlen((string) ($context['code_context'] ?? '')),
+                'indexed_files' => (int) ($context['llama_file_index_count'] ?? 0),
+            ]);
+        }
 
-        $response = $client
-            ->timeout(config('ai-code-orchestrator.ai.timeout', 15))
-            ->post($baseUrl.'/chat/completions', $payload);
+        $client = $this->buildHttpClient($apiKey);
+        $startedAt = microtime(true);
+
+        try {
+            $response = $client
+                ->timeout($timeoutSeconds)
+                ->post($endpoint, $payload);
+        } catch (Throwable $e) {
+            if ($this->shouldLogDebug()) {
+                Log::error('ai_orchestrator.llama.request.exception', [
+                    'request_id' => $requestId,
+                    'duration_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+                    'exception_class' => $e::class,
+                    'exception_message' => $e->getMessage(),
+                ]);
+            }
+
+            throw $e;
+        }
+
+        $durationMs = (int) round((microtime(true) - $startedAt) * 1000);
 
         if (! $response->successful()) {
             $body = $response->body();
+            if ($this->shouldLogDebug()) {
+                Log::warning('ai_orchestrator.llama.request.failed', [
+                    'request_id' => $requestId,
+                    'duration_ms' => $durationMs,
+                    'status' => $response->status(),
+                    'body_preview' => mb_substr($body, 0, 1200),
+                ]);
+            }
+
             return 'AI error '.$response->status().': '.($body !== '' ? $body : 'empty response body');
         }
 
         $json = $response->json();
+        if ($this->shouldLogDebug()) {
+            Log::info('ai_orchestrator.llama.request.success', [
+                'request_id' => $requestId,
+                'duration_ms' => $durationMs,
+                'status' => $response->status(),
+                'finish_reason' => data_get($json, 'choices.0.finish_reason'),
+                'usage_prompt_tokens' => data_get($json, 'usage.prompt_tokens'),
+                'usage_completion_tokens' => data_get($json, 'usage.completion_tokens'),
+                'usage_total_tokens' => data_get($json, 'usage.total_tokens'),
+            ]);
+        }
+
         $content = data_get($json, 'choices.0.message.content');
 
         if (is_string($content) && $content !== '') {
@@ -95,8 +160,8 @@ class LlamaClient implements AiClientInterface
         $laravelVersion = $this->getLaravelVersion();
 
         return $language === 'en'
-            ? "You are a technical assistant. Be concise. Do not repeat the error or stack trace. Provide only root cause and a practical fix. Respond in HTML only (no Markdown), using <strong> and <ul><li> as needed. Project: Laravel {$laravelVersion}."
-            : "Sei un assistente tecnico. Sii conciso. Non ripetere errore o stack trace. Fornisci solo causa e soluzione pratica. Rispondi solo in HTML (niente Markdown), usando <strong> e <ul><li> se necessario. Progetto: Laravel {$laravelVersion}.";
+            ? "You are a technical assistant. Be concise. Do not repeat the error or stack trace. Provide only root cause and a practical fix. First respond in HTML (use <strong> and <ul><li>), then append a fenced ```patch``` block with a unified diff that can be applied with git apply when possible. Project: Laravel {$laravelVersion}."
+            : "Sei un assistente tecnico. Sii conciso. Non ripetere errore o stack trace. Fornisci solo causa e soluzione pratica. Rispondi prima in HTML (usa <strong> e <ul><li>), poi aggiungi un blocco ```patch``` con una unified diff applicabile con git apply quando possibile. Progetto: Laravel {$laravelVersion}.";
     }
 
     private function getLaravelVersion(): string
@@ -133,6 +198,13 @@ class LlamaClient implements AiClientInterface
     private function getCachedFileIndex(): string
     {
         $config = config('ai-code-orchestrator.ai.llama.file_index', []);
+        $configuredMaxFiles = isset($config['max_files']) ? (int) $config['max_files'] : self::DEFAULT_INDEX_MAX_FILES;
+        $configuredMaxChars = isset($config['max_chars']) ? (int) $config['max_chars'] : self::DEFAULT_INDEX_MAX_CHARS;
+        $config['max_files'] = max(1, min(self::DEFAULT_INDEX_MAX_FILES, $configuredMaxFiles));
+        $config['max_chars'] = max(200, min(self::DEFAULT_INDEX_MAX_CHARS, $configuredMaxChars));
+        $cacheKey = (string) ($config['cache_key'] ?? 'ai-code-orchestrator.llama.file_index');
+        $config['cache_key'] = $cacheKey.'.max_files_'.$config['max_files'].'_max_chars_'.$config['max_chars'];
+
         $cache = new LlamaIndexCache();
         $data = $cache->getIndexData($config);
 
@@ -148,7 +220,8 @@ class LlamaClient implements AiClientInterface
         }
 
         $limit = (int) ($config['limit'] ?? 5);
-        $maxChars = (int) ($config['max_chars'] ?? 4000);
+        $configuredMaxChars = isset($config['max_chars']) ? (int) $config['max_chars'] : self::DEFAULT_PREVIOUS_ERRORS_MAX_CHARS;
+        $maxChars = max(200, min(self::DEFAULT_PREVIOUS_ERRORS_MAX_CHARS, $configuredMaxChars));
 
         try {
             $reports = ErrorReport::query()
@@ -184,5 +257,33 @@ class LlamaClient implements AiClientInterface
         }
 
         return mb_substr($text, 0, $maxChars)."\n... [truncated]";
+    }
+
+    private function resolveTimeout(): int
+    {
+        $timeout = (int) config('ai-code-orchestrator.ai.timeout', self::DEFAULT_TIMEOUT_SECONDS);
+
+        return max(5, $timeout);
+    }
+
+    private function resolveMaxTokens(array $config): int
+    {
+        $configured = isset($config['max_tokens']) ? (int) $config['max_tokens'] : self::DEFAULT_MAX_TOKENS;
+
+        return max(32, min(self::DEFAULT_MAX_TOKENS, $configured));
+    }
+
+    private function buildRequestId(): string
+    {
+        try {
+            return 'llama_'.bin2hex(random_bytes(8));
+        } catch (Throwable) {
+            return 'llama_'.str_replace('.', '', uniqid('', true));
+        }
+    }
+
+    private function shouldLogDebug(): bool
+    {
+        return (bool) config('app.debug', false);
     }
 }

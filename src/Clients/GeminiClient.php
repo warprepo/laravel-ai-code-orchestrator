@@ -7,6 +7,9 @@ use Throwable;
 
 class GeminiClient implements AiClientInterface
 {
+    private const int DEFAULT_TIMEOUT_SECONDS = 180;
+    private const int DEFAULT_MAX_TOKENS = 400;
+
     public function analyze(Throwable $throwable, array $context): string
     {
         $config = config('ai-code-orchestrator.ai.gemini');
@@ -16,6 +19,12 @@ class GeminiClient implements AiClientInterface
 
         $language = config('ai-code-orchestrator.ai.language', 'it');
         $systemPrompt = $this->resolveSystemPrompt($language);
+        $maxTokens = self::DEFAULT_MAX_TOKENS;
+        if (isset($config['max_tokens'])) {
+            $maxTokens = (int) $config['max_tokens'];
+        } elseif (isset($config['max_output_tokens'])) {
+            $maxTokens = (int) $config['max_output_tokens'];
+        }
 
         $payload = [
             'contents' => [
@@ -28,11 +37,11 @@ class GeminiClient implements AiClientInterface
             ],
             'generationConfig' => [
                 'temperature' => $config['temperature'] ?? 0.2,
-                'maxOutputTokens' => $config['max_tokens'] ?? $config['max_output_tokens'] ?? 400,
+                'maxOutputTokens' => $maxTokens,
             ],
         ];
 
-        $response = Http::timeout(config('ai-code-orchestrator.ai.timeout', 15))
+        $response = Http::timeout($this->resolveTimeout())
             ->post($baseUrl.'/models/'.$model.':generateContent?key='.$apiKey, $payload);
 
         if (! $response->successful()) {
@@ -88,5 +97,12 @@ class GeminiClient implements AiClientInterface
         } catch (Throwable) {
             return 'unknown';
         }
+    }
+
+    private function resolveTimeout(): int
+    {
+        $timeout = (int) config('ai-code-orchestrator.ai.timeout', self::DEFAULT_TIMEOUT_SECONDS);
+
+        return max(5, $timeout);
     }
 }

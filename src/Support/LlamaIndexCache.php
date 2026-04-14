@@ -7,6 +7,9 @@ use Throwable;
 
 class LlamaIndexCache
 {
+    private const int DEFAULT_INDEX_MAX_FILES = 10;
+    private const int DEFAULT_INDEX_MAX_CHARS = 1000;
+
     public function getIndexData(array $config): array
     {
         $enabled = (bool) ($config['enabled'] ?? true);
@@ -16,15 +19,18 @@ class LlamaIndexCache
 
         $cacheSeconds = (int) ($config['cache_seconds'] ?? 3600);
         $cacheKey = (string) ($config['cache_key'] ?? 'ai-code-orchestrator.llama.file_index');
+        $configuredMaxFiles = isset($config['max_files']) ? (int) $config['max_files'] : self::DEFAULT_INDEX_MAX_FILES;
+        $configuredMaxChars = isset($config['max_chars']) ? (int) $config['max_chars'] : self::DEFAULT_INDEX_MAX_CHARS;
+        $maxFiles = max(1, min(self::DEFAULT_INDEX_MAX_FILES, $configuredMaxFiles));
+        $maxChars = max(200, min(self::DEFAULT_INDEX_MAX_CHARS, $configuredMaxChars));
+        $cacheKey .= '.max_files_'.$maxFiles.'_max_chars_'.$maxChars;
 
         try {
-            $value = Cache::remember($cacheKey, $cacheSeconds, function () use ($config): array {
+            $value = Cache::remember($cacheKey, $cacheSeconds, function () use ($config, $maxFiles, $maxChars): array {
                 $builder = new LlamaFileIndexBuilder();
                 $roots = (array) ($config['roots'] ?? ['app', 'config', 'packages']);
                 $excludeGlobs = (array) ($config['exclude_globs'] ?? []);
                 $extensions = (array) ($config['extensions'] ?? []);
-                $maxFiles = (int) ($config['max_files'] ?? 2000);
-                $maxChars = (int) ($config['max_chars'] ?? 6000);
 
                 return $builder->buildWithCount($roots, $excludeGlobs, $extensions, $maxFiles, $maxChars);
             });

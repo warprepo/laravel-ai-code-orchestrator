@@ -7,6 +7,9 @@ use Throwable;
 
 class OpenAiClient implements AiClientInterface
 {
+    private const int DEFAULT_TIMEOUT_SECONDS = 180;
+    private const int DEFAULT_MAX_TOKENS = 400;
+
     public function analyze(Throwable $throwable, array $context): string
     {
         $config = config('ai-code-orchestrator.ai.openai');
@@ -18,7 +21,7 @@ class OpenAiClient implements AiClientInterface
         $payload = [
             'model' => $config['model'] ?? 'gpt-4o-mini',
             'temperature' => $config['temperature'] ?? 0.2,
-            'max_tokens' => $config['max_tokens'] ?? 400,
+            'max_tokens' => isset($config['max_tokens']) ? (int) $config['max_tokens'] : self::DEFAULT_MAX_TOKENS,
             'messages' => [
                 [
                     'role' => 'system',
@@ -32,7 +35,7 @@ class OpenAiClient implements AiClientInterface
         ];
 
         $response = Http::withToken($config['api_key'] ?? '')
-            ->timeout(config('ai-code-orchestrator.ai.timeout', 15))
+            ->timeout($this->resolveTimeout())
             ->post($baseUrl.'/chat/completions', $payload);
 
         if (! $response->successful()) {
@@ -88,5 +91,12 @@ class OpenAiClient implements AiClientInterface
         } catch (Throwable) {
             return 'unknown';
         }
+    }
+
+    private function resolveTimeout(): int
+    {
+        $timeout = (int) config('ai-code-orchestrator.ai.timeout', self::DEFAULT_TIMEOUT_SECONDS);
+
+        return max(5, $timeout);
     }
 }
