@@ -15,6 +15,15 @@ class AiSolutionApplyService
 
     public function apply(ErrorReport $report): array
     {
+        $gitSetup = $this->prepareFixBranch($report);
+        if (! $gitSetup['ok']) {
+            return [
+                'ok' => false,
+                'message' => $gitSetup['message'],
+            ];
+        }
+
+        $branchName = $gitSetup['branch'];
         $solution = (string) ($report->ai_solution ?? '');
         $patch = $this->extractPatch($solution);
         $patchSource = 'stored_solution';
@@ -28,6 +37,7 @@ class AiSolutionApplyService
             return [
                 'ok' => false,
                 'message' => 'Nessuna patch trovata nella risposta AI e fallback Llama non riuscito.',
+                'branch' => $branchName,
             ];
         }
 
@@ -44,6 +54,7 @@ class AiSolutionApplyService
                 'message' => 'Patch non valida: '.$checkResult['error'],
                 'patch_file' => $patchFile,
                 'patch_source' => $patchSource,
+                'branch' => $branchName,
             ];
         }
 
@@ -64,6 +75,18 @@ class AiSolutionApplyService
                 'message' => 'Patch non applicata: '.$applyProcess->getErrorOutput(),
                 'patch_file' => $patchFile,
                 'patch_source' => $patchSource,
+                'branch' => $branchName,
+            ];
+        }
+
+        $commitResult = $this->commitAndPushFix($report, $branchName);
+        if (! $commitResult['ok']) {
+            return [
+                'ok' => false,
+                'message' => $commitResult['message'],
+                'patch_file' => $patchFile,
+                'patch_source' => $patchSource,
+                'branch' => $branchName,
             ];
         }
 
@@ -72,7 +95,129 @@ class AiSolutionApplyService
             'message' => 'Patch applicata correttamente.',
             'patch_file' => $patchFile,
             'patch_source' => $patchSource,
+            'branch' => $branchName,
+            'commit' => $commitResult['commit'],
         ];
+    }
+
+    private function prepareFixBranch(ErrorReport $report): array
+    {
+        $repoPath = base_path();
+        $branchName = $this->buildFixBranchName($report);
+
+        $checkout = new Process([
+            'git',
+            '-C',
+            $repoPath,
+            'checkout',
+            '-b',
+            $branchName,
+        ]);
+        $checkout->run();
+
+        if (! $checkout->isSuccessful()) {
+            return [
+                'ok' => false,
+                'message' => 'Impossibile creare il branch fix: '.$checkout->getErrorOutput(),
+            ];
+        }
+
+        $push = new Process([
+            'git',
+            '-C',
+            $repoPath,
+            'push',
+            '-u',
+            'origin',
+            $branchName,
+        ]);
+        $push->run();
+
+        if (! $push->isSuccessful()) {
+            return [
+                'ok' => false,
+                'message' => 'Branch creato ma push iniziale fallito: '.$push->getErrorOutput(),
+                'branch' => $branchName,
+            ];
+        }
+
+        return [
+            'ok' => true,
+            'branch' => $branchName,
+        ];
+    }
+
+    private function commitAndPushFix(ErrorReport $report, string $branchName): array
+    {
+        $repoPath = base_path();
+
+        $add = new Process(['git', '-C', $repoPath, 'add', '-A']);
+        $add->run();
+        if (! $add->isSuccessful()) {
+            return [
+                'ok' => false,
+                'message' => 'Patch applicata ma git add fallito: '.$add->getErrorOutput(),
+            ];
+        }
+
+        $commitMessage = "AI fix for report #{$report->id}";
+        $commit = new Process([
+            'git',
+            '-C',
+            $repoPath,
+            '-c',
+            'commit.gpgsign=false',
+            'commit',
+            '-m',
+            $commitMessage,
+        ]);
+        $commit->run();
+
+        if (! $commit->isSuccessful()) {
+            return [
+                'ok' => false,
+                'message' => 'Patch applicata ma commit fallito: '.$commit->getErrorOutput(),
+            ];
+        }
+
+        $push = new Process([
+            'git',
+            '-C',
+            $repoPath,
+            'push',
+            'origin',
+            $branchName,
+        ]);
+        $push->run();
+
+        if (! $push->isSuccessful()) {
+            return [
+                'ok' => false,
+                'message' => 'Commit creato ma push fallito: '.$push->getErrorOutput(),
+            ];
+        }
+
+        $hash = new Process([
+            'git',
+            '-C',
+            $repoPath,
+            'rev-parse',
+            '--short',
+            'HEAD',
+        ]);
+        $hash->run();
+
+        return [
+            'ok' => true,
+            'commit' => trim($hash->getOutput()),
+        ];
+    }
+
+    private function buildFixBranchName(ErrorReport $report): string
+    {
+        $suffix = date('YmdHis').'-'.$report->id;
+
+        return 'ai-fix/report-'.$suffix;
     }
 
     private function runGitApplyCheck(string $patchFile): array
