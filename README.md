@@ -23,10 +23,14 @@ Main `.env` variables:
 ```env
 AI_CODE_ORCHESTRATOR_ENABLED=true
 AI_CODE_ORCHESTRATOR_ADMIN_EMAIL=admin@example.com
+AI_CODE_ORCHESTRATOR_MAIL_SUBJECT="Error with AI solution"
 AI_CODE_ORCHESTRATOR_PROVIDER=llama
-AI_CODE_ORCHESTRATOR_AI_LANGUAGE=en
+AI_CODE_ORCHESTRATOR_AI_LANGUAGE=it
 AI_CODE_ORCHESTRATOR_QUEUE=default
+AI_CODE_ORCHESTRATOR_TIMEOUT=180
 AI_CODE_ORCHESTRATOR_STORE_ERRORS=true
+AI_CODE_ORCHESTRATOR_ALLOW_MANUAL_REPORTS=true
+AI_CODE_ORCHESTRATOR_MANUAL_REPORT_TOKEN=8fea9f118612ed7c255ba88e043cb49ff73c48f6da6c5bca0f133ac3bab1d7bc
 ```
 
 Remote providers (examples):
@@ -37,6 +41,7 @@ OpenAI:
 OPENAI_API_KEY=your-openai-key
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_TEMPERATURE=0.2
 OPENAI_MAX_TOKENS=2000
 ```
 
@@ -46,6 +51,7 @@ Groq:
 GROQ_API_KEY=your-groq-key
 GROQ_BASE_URL=https://api.groq.com/openai/v1
 GROQ_MODEL=llama-3.1-8b-instant
+GROQ_TEMPERATURE=0.2
 GROQ_MAX_TOKENS=8192
 ```
 
@@ -55,6 +61,7 @@ Gemini:
 GEMINI_API_KEY=your-gemini-key
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_MODEL=gemini-flash-lite-latest
+GEMINI_TEMPERATURE=0.2
 GEMINI_MAX_TOKENS=8192
 ```
 
@@ -63,6 +70,7 @@ Llama local provider (llama.cpp / OpenAI-compatible):
 ```env
 LLAMA_BASE_URL=http://127.0.0.1:8080/v1
 LLAMA_MODEL=local-model
+LLAMA_MAX_TOKENS=1500
 LLAMA_API_KEY=
 ```
 
@@ -132,7 +140,7 @@ Use the included artisan command:
 Before testing locally, start a queue worker in another terminal:
 
 ```bash
-php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=120
+php artisan queue:work --queue=default --sleep=3 --tries=3 --timeout=240
 ```
 
 Then run:

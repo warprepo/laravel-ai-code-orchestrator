@@ -19,6 +19,14 @@ class ErrorService
     public function handleThrowable(Throwable $throwable, array $context = []): void
     {
         if (! config('ai-code-orchestrator.enabled', true)) {
+            if ($this->shouldLogDebug()) {
+                Log::info('ai_orchestrator.report.skipped', [
+                    'reason' => 'orchestrator_disabled',
+                    'exception_class' => get_class($throwable),
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
+
             return;
         }
 
@@ -26,7 +34,24 @@ class ErrorService
         $report = $this->storeReport($throwable, $context);
 
         if (! $report) {
+            if ($this->shouldLogDebug()) {
+                Log::info('ai_orchestrator.report.skipped', [
+                    'reason' => 'store_errors_disabled',
+                    'exception_class' => get_class($throwable),
+                    'message' => $throwable->getMessage(),
+                ]);
+            }
+
             return;
+        }
+
+        if ($this->shouldLogDebug()) {
+            Log::info('ai_orchestrator.report.created', [
+                'report_id' => $report->id,
+                'status' => $report->status,
+                'provider' => config('ai-code-orchestrator.ai.provider', 'openai'),
+                'indexed_files' => (int) ($context['llama_file_index_count'] ?? 0),
+            ]);
         }
 
         try {
@@ -35,15 +60,40 @@ class ErrorService
             $report->ai_solution = $solution;
             $report->status = $solution === 'AI non ha fornito una risposta valida.' ? 'ai_empty' : 'analyzed';
             $report->save();
+
+            if ($this->shouldLogDebug()) {
+                Log::info('ai_orchestrator.report.analyzed', [
+                    'report_id' => $report->id,
+                    'status' => $report->status,
+                    'solution_chars' => mb_strlen($solution),
+                ]);
+            }
         } catch (Throwable $aiError) {
             $report->ai_solution = 'AI non disponibile: '.$aiError->getMessage();
             $report->status = 'ai_failed';
             $report->save();
             Log::warning('AI analysis failed', ['error' => $aiError->getMessage()]);
+            if ($this->shouldLogDebug()) {
+                Log::warning('ai_orchestrator.report.ai_failed', [
+                    'report_id' => $report->id,
+                    'status' => $report->status,
+                    'error_class' => $aiError::class,
+                    'error' => $aiError->getMessage(),
+                ]);
+            }
         }
 
+        $queueName = config('ai-code-orchestrator.queue', 'default');
+
         SendErrorSolutionJob::dispatch($report->id)
-            ->onQueue(config('ai-code-orchestrator.queue', 'default'));
+            ->onQueue($queueName);
+
+        if ($this->shouldLogDebug()) {
+            Log::info('ai_orchestrator.report.job_dispatched', [
+                'report_id' => $report->id,
+                'queue' => $queueName,
+            ]);
+        }
     }
 
     private function augmentContext(Throwable $throwable, array $context): array
@@ -96,5 +146,10 @@ class ErrorService
             'context' => $context,
             'status' => 'pending',
         ]);
+    }
+
+    private function shouldLogDebug(): bool
+    {
+        return (bool) config('app.debug', false);
     }
 }
